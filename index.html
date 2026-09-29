@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#191b1a" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231c211f'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='42' fill='%23d3b784'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E" />
+    <title>Boccaccio — livros com personalidade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">✦</span><span>Boccaccio</span></div>
+        <div class="document-name"><input id="docTitle" aria-label="Nome do documento" value="Meu livro sem título" /><span id="saveStatus">Salvo neste navegador</span></div>
+        <div class="top-actions">
+          <button class="quiet" id="importBtn" title="Abrir arquivo Boccaccio">Abrir</button>
+          <button class="quiet" id="saveBtn" title="Baixar cópia editável">Salvar arquivo</button>
+          <button class="quiet" id="exportBtn" title="Exportar HTML">Exportar</button>
+          <button class="primary" id="printBtn" title="Imprimir ou salvar como PDF">↗ <span>PDF / Imprimir</span></button>
+          <button class="mobile-design" id="designToggle" title="Design da página" aria-label="Mostrar design da página">⚙</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="left-sidebar" aria-label="Páginas do livro">
+          <div class="sidebar-head"><span>PÁGINAS</span><button id="addPageSmall" title="Nova página" aria-label="Nova página">＋</button></div>
+          <div id="pageList" class="page-list"></div>
+          <button class="add-page" id="addPage">＋ &nbsp; Nova página</button>
+          <div class="sidebar-bottom"><span class="status-dot"></span> Seu trabalho fica neste navegador</div>
+        </aside>
+
+        <main class="main-area">
+          <div class="toolbar" role="toolbar" aria-label="Formatação de texto">
+            <div class="toolbar-group">
+              <select id="blockStyle" aria-label="Estilo do parágrafo" title="Estilo do parágrafo"><option value="p">Corpo de texto</option><option value="h1">Título</option><option value="h2">Subtítulo</option><option value="blockquote">Citação</option></select>
+              <select id="fontFamily" aria-label="Fonte" title="Fonte"></select>
+              <select id="fontSize" aria-label="Tamanho da fonte" title="Tamanho da fonte"><option value="12">12</option><option value="14">14</option><option value="16" selected>16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option><option value="28">28</option><option value="36">36</option><option value="48">48</option><option value="64">64</option></select>
+            </div>
+            <div class="toolbar-separator"></div>
+            <div class="toolbar-group">
+              <button class="tool strong" data-command="bold" title="Negrito (Ctrl+B)">B</button>
+              <button class="tool italic" data-command="italic" title="Itálico (Ctrl+I)">I</button>
+              <button class="tool underline" data-command="underline" title="Sublinhado (Ctrl+U)">U</button>
+              <label class="color-tool" title="Cor do texto"><span>A</span><input type="color" id="textColor" value="#302820" aria-label="Cor do texto" /></label>
+              <button class="tool" id="shadowBtn" title="Sombra no texto">◐</button>
+            </div>
+            <div class="toolbar-separator"></div>
+            <div class="toolbar-group">
+              <button class="tool" data-command="justifyLeft" title="Alinhar à esquerda">☷</button>
+              <button class="tool" data-command="justifyCenter" title="Centralizar">≡</button>
+              <button class="tool" data-command="justifyRight" title="Alinhar à direita">☰</button>
+              <button class="tool" data-command="insertUnorderedList" title="Lista com marcadores">☷<small>•</small></button>
+            </div>
+            <div class="toolbar-separator"></div>
+            <div class="toolbar-group">
+              <button class="tool labeled" id="insertImageBtn" title="Inserir imagem">▧ <span>Imagem</span></button>
+              <button class="tool" data-command="undo" title="Desfazer (Ctrl+Z)">↶</button>
+              <button class="tool" data-command="redo" title="Refazer (Ctrl+Y)">↷</button>
+            </div>
+          </div>
+
+          <div class="canvas-wrap" id="canvasWrap"><div id="pageCanvas" class="page-canvas"></div></div>
+          <div class="canvas-footer"><span id="pageCount">1 página</span><span id="wordCount">0 palavras</span><span>Ctrl + P para PDF</span></div>
+        </main>
+
+        <aside class="right-sidebar" aria-label="Propriedades da página">
+          <div class="inspector-heading"><span class="inspector-icon">◧</span><div><strong>Design da página</strong><small>Personalize cada folha</small></div></div>
+          <div class="section-label">FUNDO DA PÁGINA</div>
+          <div class="background-grid" id="backgroundGrid">
+            <button data-bg="paper" class="background-tile paper selected"><span></span><small>Papel</small></button>
+            <button data-bg="parchment" class="background-tile parchment"><span></span><small>Pergaminho</small></button>
+            <button data-bg="night" class="background-tile night"><span></span><small>Noturno</small></button>
+            <button data-bg="custom" class="background-tile custom"><span>＋</span><small>Cor</small></button>
+          </div>
+          <label class="field-row"><span>Cor personalizada</span><input type="color" id="pageColor" value="#ffffff" aria-label="Cor da página" /></label>
+          <button class="secondary wide" id="backgroundImageBtn">▧ &nbsp; Imagem de fundo</button>
+          <button class="text-action" id="removeBackgroundBtn" hidden>Remover imagem de fundo</button>
+
+          <div class="inspector-divider"></div>
+          <div class="section-label">LAYOUT</div>
+          <label class="field-row"><span>Margens</span><select id="pageMargin"><option value="normal">Normal</option><option value="narrow">Estreita</option><option value="wide">Larga</option></select></label>
+          <label class="field-row"><span>Formato</span><select id="pageSize"><option value="a4">A4</option><option value="letter">Carta</option></select></label>
+
+          <div id="imageInspector" hidden>
+            <div class="inspector-divider"></div>
+            <div class="section-label">IMAGEM SELECIONADA</div>
+            <label class="field-row"><span>Largura</span><input type="range" id="imageWidth" min="15" max="100" value="40" /><output id="imageWidthValue">40%</output></label>
+            <label class="field-row"><span>Texto ao redor</span><select id="imageWrap"><option value="left">À direita</option><option value="right">À esquerda</option><option value="center">Sem contorno</option></select></label>
+            <label class="field-row"><span>Estilo</span><select id="imageStyle"><option value="plain">Sem moldura</option><option value="frame">Moldura</option><option value="shadow">Sombra</option></select></label>
+            <button class="text-action danger" id="removeImageBtn">Remover imagem</button>
+          </div>
+
+          <div class="inspector-divider"></div>
+          <div class="section-label">PÁGINA ATUAL</div>
+          <button class="secondary wide" id="duplicatePageBtn">▣ &nbsp; Duplicar página</button>
+          <button class="text-action danger" id="deletePageBtn">Excluir página</button>
+
+          <div class="tip"><span>✦</span><p><strong>Dica de diagramação</strong><br />Insira imagem e escolha “Texto ao redor”. Parágrafos se ajustam automaticamente.</p></div>
+        </aside>
+      </div>
+    </div>
+
+    <input type="file" id="imageInput" accept="image/*" hidden />
+    <input type="file" id="backgroundInput" accept="image/*" hidden />
+    <input type="file" id="documentInput" accept=".boccaccio,application/json" hidden />
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
