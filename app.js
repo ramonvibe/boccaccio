@@ -9,6 +9,7 @@ const DEFAULT_PAGE = () => ({id: crypto.randomUUID(), html: '<h1>Crônicas de um
 let doc = {title: 'Meu livro sem título', pages: [DEFAULT_PAGE()]};
 let activeId = doc.pages[0].id;
 let selectedImage = null;
+let selectedCell = null;
 let savedRange = null;
 let saveTimer = null;
 let toastTimer = null;
@@ -99,7 +100,7 @@ function safeStyle(value) {
 function cleanHtml(html) {
   const source = document.createElement('div');
   source.innerHTML = String(html || '');
-  const allowed = new Set(['P','H1','H2','H3','DIV','BR','B','STRONG','I','EM','U','S','UL','OL','LI','BLOCKQUOTE','SPAN','FONT','IMG']);
+  const allowed = new Set(['P','H1','H2','H3','DIV','BR','B','STRONG','I','EM','U','S','SUB','SUP','UL','OL','LI','BLOCKQUOTE','SPAN','FONT','IMG','A','HR','TABLE','TBODY','THEAD','TR','TD','TH']);
   function cleanNode(node) {
     if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
     if (node.nodeType !== Node.ELEMENT_NODE) return document.createDocumentFragment();
@@ -122,6 +123,13 @@ function cleanHtml(html) {
     }
     const style = safeStyle(node.getAttribute('style'));
     if (style) output.setAttribute('style', style);
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') || '';
+      if (/^https?:\/\/[^\s<>"']+$/i.test(href)) { output.href = href; output.target = '_blank'; output.rel = 'noopener noreferrer'; }
+    }
+    if (node.tagName === 'TD' || node.tagName === 'TH') {
+      if (['sum','average'].includes(node.dataset.formula)) output.dataset.formula = node.dataset.formula;
+    }
     if (node.classList.contains('text-shadow')) output.classList.add('text-shadow');
     if (node.tagName === 'FONT') {
       const face = node.getAttribute('face');
@@ -147,7 +155,8 @@ function normalizeDocument(value) {
       bgColor: safeCssColor(page.bgColor), bgImage: safeImageUrl(page.bgImage),
       margin: ['normal','narrow','wide','custom'].includes(page.margin) ? page.margin : 'normal',
       margins: Object.fromEntries(['top','right','bottom','left'].map(side => [side,safeMarginNumber(page.margins?.[side])])),
-      size: ['a4','letter'].includes(page.size) ? page.size : 'a4'
+      size: ['a4','letter'].includes(page.size) ? page.size : 'a4',
+      pageNumber: Boolean(page.pageNumber)
     }))
   };
 }
@@ -202,10 +211,11 @@ function renderPages() {
     editor.setAttribute('aria-label',`Conteúdo da página ${index + 1}`); editor.setAttribute('aria-multiline','true');
     editor.innerHTML = page.html;
     editor.addEventListener('focus', () => activatePage(page.id, false));
-    editor.addEventListener('input', () => { page.html = editor.innerHTML; paginateFrom(doc.pages.indexOf(page)); });
+    editor.addEventListener('input', () => { recalculateTables(editor); page.html = editor.innerHTML; paginateFrom(doc.pages.indexOf(page)); });
     editor.addEventListener('click', event => {
       if (event.target.matches('img.editor-image')) selectImage(event.target);
       else selectImage(null);
+      selectCell(event.target.closest('td,th'));
     });
     editor.addEventListener('paste', handlePaste);
     editor.addEventListener('dragover', event => { if ([...event.dataTransfer.items].some(item => item.type.startsWith('image/'))) event.preventDefault(); });
@@ -218,7 +228,9 @@ function renderPages() {
       insertImage(file);
     });
     editor.addEventListener('keydown', handleEditorKeydown);
-    sheet.append(editor); shell.append(label,sheet);
+    sheet.append(editor);
+    if (page.pageNumber) { const number = document.createElement('span'); number.className = 'page-number'; number.textContent = String(index + 1); sheet.append(number); }
+    shell.append(label,sheet);
     const note = document.createElement('div'); note.className = 'overflow-note'; note.textContent = 'Elemento grande demais para esta página. Reduza imagem, fonte ou margens.'; shell.append(note);
     canvas.append(shell);
     for (const font of FONT_NAMES) if (page.html.includes(font)) ensureFont(font);
@@ -260,7 +272,18 @@ function restoreCaret() {
   activeId = editor.dataset.id; savedRange = range.cloneRange();
 }
 function splitToFit(block,editor) {
-  if (block.nodeType !== Node.ELEMENT_NODE || !block.textContent.trim()) return null;
+  if (block.nodeType !== Node.ELEMENT_NODE || (!block.textContent.trim() && block.tagName !== 'TABLE')) return null;
+  if (block.tagName === 'TABLE') {
+    const rows = [...block.rows];
+    if (rows.length < 2) return null;
+    const limit = editor.getBoundingClientRect().bottom - parseFloat(getComputedStyle(editor).paddingBottom) * (editor.getBoundingClientRect().height / editor.clientHeight) - 2;
+    const firstOverflow = rows.findIndex(row => row.getBoundingClientRect().bottom > limit);
+    if (firstOverflow <= 0) return null;
+    const continuation = block.cloneNode(false);
+    const body = document.createElement('tbody'); continuation.append(body);
+    rows.slice(firstOverflow).forEach(row => body.append(row));
+    return continuation;
+  }
   const scale = editor.getBoundingClientRect().height / editor.clientHeight;
   const limit = editor.getBoundingClientRect().bottom - parseFloat(getComputedStyle(editor).paddingBottom) * scale - 2;
   const walker = document.createTreeWalker(block,NodeFilter.SHOW_TEXT);
@@ -347,6 +370,7 @@ function updateInspector() {
   $('#customMargins').hidden = page.margin !== 'custom';
   document.querySelectorAll('[data-margin-side]').forEach(input => { input.value = safeMarginNumber(page.margins?.[input.dataset.marginSide]); });
   $('#removeBackgroundBtn').hidden = !page.bgImage;
+  $('#showPageNumber').checked = Boolean(page.pageNumber);
   $('#deletePageBtn').disabled = doc.pages.length === 1;
 }
 function activatePage(id, scroll) {
@@ -384,6 +408,79 @@ function syncEditor() {
   const editor = editorFor(); if (!editor) return;
   currentPage().html = editor.innerHTML;
   paginateFrom(doc.pages.indexOf(currentPage()));
+}
+function selectCell(cell) {
+  selectedCell = cell && cell.isConnected ? cell : null;
+  $('#tableInspector').hidden = !selectedCell;
+}
+function insertHtml(html) {
+  restoreSelection(); document.execCommand('insertHTML',false,html); syncEditor();
+}
+function insertTable() {
+  const rows = Array.from({length:3},() => '<tr><td><br></td><td><br></td><td><br></td></tr>').join('');
+  insertHtml(`<table><tbody>${rows}</tbody></table><p><br></p>`);
+  document.querySelector('.insert-menu').open = false;
+}
+function tableAction(action) {
+  const cell = selectedCell;
+  if (!cell?.isConnected) return;
+  const table = cell.closest('table');
+  if (action === 'delete') { table.remove(); selectCell(null); syncEditor(); return; }
+  if (action === 'row') { const row = cell.parentElement; const copy = row.cloneNode(true); [...copy.cells].forEach(item => { item.innerHTML = '<br>'; delete item.dataset.formula; }); row.after(copy); }
+  if (action === 'column') { const index = cell.cellIndex; for (const row of table.rows) row.cells[index]?.after(document.createElement('td')); }
+  if (action === 'sum' || action === 'average') { cell.dataset.formula = action; calculateCell(cell); }
+  syncEditor();
+}
+function calculateCell(cell) {
+  const cells = [...cell.closest('table').rows].slice(0,cell.parentElement.rowIndex).map(row => row.cells[cell.cellIndex]).filter(Boolean);
+  const numbers = cells.map(item => item.textContent.trim()).filter(Boolean).map(value => Number(value.replace(',','.'))).filter(number => Number.isFinite(number));
+  const total = numbers.reduce((sum,number) => sum + number,0);
+  cell.textContent = String(cell.dataset.formula === 'average' && numbers.length ? total / numbers.length : total).replace('.',',');
+}
+function recalculateTables(editor) {
+  editor.querySelectorAll('td[data-formula],th[data-formula]').forEach(calculateCell);
+}
+function findNext() {
+  const needle = $('#findText').value;
+  if (!needle) return;
+  const editors = [...document.querySelectorAll('.page-content')];
+  const selection = window.getSelection();
+  const current = selection.rangeCount ? selection.getRangeAt(0) : null;
+  const matches = [];
+  for (const editor of editors) {
+    const walker = document.createTreeWalker(editor,NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.parentElement.closest('table [data-formula]')) continue;
+      let from = 0, index;
+      while ((index = node.textContent.toLocaleLowerCase('pt-BR').indexOf(needle.toLocaleLowerCase('pt-BR'),from)) !== -1) { matches.push([node,index]); from = index + Math.max(1,needle.length); }
+    }
+  }
+  $('#findResult').textContent = `${matches.length} resultado${matches.length === 1 ? '' : 's'}`;
+  if (!matches.length) return;
+  const after = matches.find(([node,index]) => current && (current.comparePoint(node,index) > 0));
+  const [node,index] = after || matches[0];
+  const range = document.createRange(); range.setStart(node,index); range.setEnd(node,index+needle.length);
+  selection.removeAllRanges(); selection.addRange(range); node.parentElement.closest('.page-content').focus(); selection.removeAllRanges(); selection.addRange(range);
+  node.parentElement.scrollIntoView({block:'center'}); rememberSelection();
+}
+function replaceMatch(all = false) {
+  const needle = $('#findText').value, replacement = $('#replaceText').value;
+  if (!needle) return;
+  if (!all) {
+    const selection = window.getSelection();
+    if (selection.toString().toLocaleLowerCase('pt-BR') !== needle.toLocaleLowerCase('pt-BR')) findNext();
+    if (selection.toString().toLocaleLowerCase('pt-BR') !== needle.toLocaleLowerCase('pt-BR')) return;
+    document.execCommand('insertText',false,replacement); syncEditor(); findNext(); return;
+  }
+  let count = 0;
+  for (const editor of document.querySelectorAll('.page-content')) {
+    const walker = document.createTreeWalker(editor,NodeFilter.SHOW_TEXT);
+    const nodes = []; let node;
+    while ((node = walker.nextNode())) if (!node.parentElement.closest('[data-formula]')) nodes.push(node);
+    for (const item of nodes) { const pieces = item.textContent.split(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi')); if (pieces.length > 1) { count += pieces.length-1; item.textContent = pieces.join(replacement); } }
+  }
+  saveVisiblePages(); paginateFrom(0,true); $('#findResult').textContent = `${count} substituição${count === 1 ? '' : 'ões'}`;
 }
 function command(name,value = null) {
   restoreSelection();
@@ -545,14 +642,14 @@ function download(name,type,contents) {
 }
 function fileName(extension) { return (doc.title.trim().replace(/[^\p{L}\p{N}\s-]/gu,'').replace(/\s+/g,'-').slice(0,80) || 'meu-livro') + extension; }
 function exportHtml() {
-  const sections = doc.pages.map(page => {
+  const sections = doc.pages.map((page,index) => {
     const [width,height] = pageDimensions(page);
     const background = page.bgImage ? `background-image:url('${page.bgImage}');background-size:cover;background-position:center;` : page.bg === 'parchment' ? 'background:radial-gradient(ellipse at 20% 15%,#fff3d1,transparent 52%),repeating-linear-gradient(100deg,#e7d1a5,#ecd8b0 7px,#e6d0a4 13px);' : page.bg === 'night' ? 'background:#23372e;color:#f0eee3;' : `background:${page.bg === 'custom' ? page.bgColor : '#fff'};`;
-    return `<section class="page" style="width:${width}px;min-height:${height}px;${background}"><article style="min-height:${height}px;padding:${pagePaddingCss(page)}">${cleanHtml(page.html)}</article></section>`;
+    return `<section class="page" style="width:${width}px;min-height:${height}px;${background}"><article style="min-height:${height}px;padding:${pagePaddingCss(page)}">${cleanHtml(page.html)}</article>${page.pageNumber ? `<span class="page-number">${index+1}</span>` : ''}</section>`;
   }).join('\n');
   const fonts = [...new Set(FONT_NAMES.filter(name => doc.pages.some(page => page.html.includes(name))).concat(['Libre Baskerville','Manufacturing Consent']))];
   const fontLinks = fonts.map(name => `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g,'+')}&display=swap">`).join('');
-  const css = `*{box-sizing:border-box}body{margin:0;background:#deded9;color:#302820}.page{margin:25px auto;box-shadow:0 6px 20px #0002;overflow:hidden}.page article{font:16px/1.5 'Libre Baskerville',serif;overflow-wrap:anywhere}.page h1,.page h2{font-family:'Manufacturing Consent',serif;font-weight:400;line-height:1.15}.page h1{font-size:3em}.page h2{font-size:2em}.page p{margin:0 0 1em}.page blockquote{border-left:3px solid #aa895c;margin:1em 0;padding-left:1em;font-style:italic}.editor-image{height:auto;max-width:100%}.editor-image[data-wrap=left]{float:left;clear:left;margin:5px 20px 13px 0}.editor-image[data-wrap=right]{float:right;clear:right;margin:5px 0 13px 20px}.editor-image[data-wrap=center]{display:block;float:none;margin:16px auto;clear:both}.editor-image[data-style=frame]{border:6px solid #efe6d2;outline:1px solid #806b51}.editor-image[data-style=shadow]{box-shadow:8px 11px 19px #0005}.text-shadow{text-shadow:2px 2px 3px #0006}@media print{@page{size:A4;margin:0}body{background:#fff}.page{margin:0;box-shadow:none;break-after:page;print-color-adjust:exact;-webkit-print-color-adjust:exact}.page:last-child{break-after:auto}}`;
+  const css = `*{box-sizing:border-box}body{margin:0;background:#deded9;color:#302820}.page{position:relative;margin:25px auto;box-shadow:0 6px 20px #0002;overflow:hidden}.page article{font:16px/1.5 'Libre Baskerville',serif;overflow-wrap:anywhere}.page h1,.page h2{font-family:'Manufacturing Consent',serif;font-weight:400;line-height:1.15}.page h1{font-size:3em}.page h2{font-size:2em}.page p{margin:0 0 1em}.page blockquote{border-left:3px solid #aa895c;margin:1em 0;padding-left:1em;font-style:italic}.page table{width:100%;border-collapse:collapse;margin:1em 0}.page td,.page th{border:1px solid #988d7b;padding:6px;min-width:30px}.page hr{border:0;border-top:1px solid #988d7b;margin:1em 0}.page-number{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font:12px 'Libre Baskerville',serif}.editor-image{height:auto;max-width:100%}.editor-image[data-wrap=left]{float:left;clear:left;margin:5px 20px 13px 0}.editor-image[data-wrap=right]{float:right;clear:right;margin:5px 0 13px 20px}.editor-image[data-wrap=center]{display:block;float:none;margin:16px auto;clear:both}.editor-image[data-style=frame]{border:6px solid #efe6d2;outline:1px solid #806b51}.editor-image[data-style=shadow]{box-shadow:8px 11px 19px #0005}.text-shadow{text-shadow:2px 2px 3px #0006}@media print{@page{size:A4;margin:0}body{background:#fff}.page{margin:0;box-shadow:none;break-after:page;print-color-adjust:exact;-webkit-print-color-adjust:exact}.page:last-child{break-after:auto}}`;
   download(fileName('.html'),'text/html;charset=utf-8',`<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(doc.title)}</title>${fontLinks}<style>${css}</style></head><body>${sections}</body></html>`);
   toast('HTML exportado.');
 }
@@ -574,6 +671,18 @@ function bindEvents() {
     $(`#${id}`).addEventListener('click',() => indentParagraph(direction));
   }
   $('#textColor').addEventListener('input',event => { document.documentElement.style.setProperty('--text-color',event.target.value); command('foreColor',event.target.value); });
+  $('#highlightColor').addEventListener('input',event => command('hiliteColor',event.target.value));
+  $('#insertLinkBtn').addEventListener('click',() => { const url = prompt('Endereço do link (https://):'); if (!url) return; if (!/^https?:\/\//i.test(url)) { toast('Use endereço começando com https:// ou http://.'); return; } command('createLink',url); document.querySelector('.insert-menu').open = false; });
+  $('#insertTableBtn').addEventListener('click',insertTable);
+  $('#insertRuleBtn').addEventListener('click',() => insertHtml('<hr><p><br></p>'));
+  $('#insertDateBtn').addEventListener('click',() => insertHtml(escapeHtml(new Date().toLocaleDateString('pt-BR'))));
+  document.querySelectorAll('[data-table-action]').forEach(button => button.addEventListener('click',() => tableAction(button.dataset.tableAction)));
+  $('#findBtn').addEventListener('click',() => { $('#findBar').hidden = false; $('#findText').focus(); });
+  $('#findClose').addEventListener('click',() => { $('#findBar').hidden = true; editorFor()?.focus(); });
+  $('#findNext').addEventListener('click',findNext);
+  $('#findText').addEventListener('keydown',event => { if (event.key === 'Enter') { event.preventDefault(); findNext(); } });
+  $('#replaceOne').addEventListener('click',() => replaceMatch(false));
+  $('#replaceAll').addEventListener('click',() => replaceMatch(true));
   $('#shadowBtn').addEventListener('mousedown',event => event.preventDefault());
   $('#shadowBtn').addEventListener('click',() => { restoreSelection(); const selection = window.getSelection(); if (!selection.rangeCount || selection.isCollapsed) { toast('Selecione texto para aplicar sombra.'); return; } const range = selection.getRangeAt(0); const span = document.createElement('span'); span.className = 'text-shadow'; try { range.surroundContents(span); } catch { span.append(range.extractContents()); range.insertNode(span); } syncEditor(); });
   $('#insertImageBtn').addEventListener('mousedown',event => event.preventDefault()); $('#insertImageBtn').addEventListener('click',() => $('#imageInput').click());
@@ -591,6 +700,7 @@ function bindEvents() {
     renderPages(); paginateFrom(index,true);
   }));
   $('#pageSize').addEventListener('change',event => { const index = doc.pages.indexOf(currentPage()); currentPage().size = event.target.value; renderPages(); paginateFrom(index,true); });
+  $('#showPageNumber').addEventListener('change',event => { currentPage().pageNumber = event.target.checked; renderPages(); scheduleSave(); });
   $('#imageWidth').addEventListener('input',event => { if (!selectedImage) return; selectedImage.style.width = `${event.target.value}%`; $('#imageWidthValue').textContent = `${event.target.value}%`; syncEditor(); });
   $('#imageWrap').addEventListener('change',event => { if (!selectedImage) return; selectedImage.dataset.wrap = event.target.value; syncEditor(); });
   $('#imageStyle').addEventListener('change',event => { if (!selectedImage) return; selectedImage.dataset.style = event.target.value; syncEditor(); });
@@ -606,7 +716,12 @@ function bindEvents() {
   $('#documentInput').addEventListener('change',async event => { const file = event.target.files[0]; if (!file) return; try { doc = normalizeDocument(JSON.parse(await file.text())); activeId = doc.pages[0].id; $('#docTitle').value = doc.title; renderPages(); requestAnimationFrame(() => paginateFrom(0,true)); toast('Livro aberto.'); } catch { toast('Arquivo Boccaccio inválido.'); } event.target.value = ''; });
   document.addEventListener('selectionchange',rememberSelection);
   document.addEventListener('visibilitychange',() => { if (document.hidden && saveTimer) { clearTimeout(saveTimer); saveNow(); } });
-  document.addEventListener('keydown',event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); $('#saveBtn').click(); } });
+  document.addEventListener('keydown',event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); $('#saveBtn').click(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); $('#findBar').hidden = false; $('#findText').focus(); }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'h') { event.preventDefault(); $('#findBar').hidden = false; $('#replaceText').focus(); }
+    if (event.key === 'Escape' && !$('#findBar').hidden) $('#findBar').hidden = true;
+  });
 }
 
 async function start() {

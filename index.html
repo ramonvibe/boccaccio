@@ -45,7 +45,12 @@
               <button class="tool strong" data-command="bold" title="Negrito (Ctrl+B)">B</button>
               <button class="tool italic" data-command="italic" title="Itálico (Ctrl+I)">I</button>
               <button class="tool underline" data-command="underline" title="Sublinhado (Ctrl+U)">U</button>
+              <button class="tool" data-command="strikeThrough" title="Tachado"><s>S</s></button>
+              <button class="tool" data-command="superscript" title="Sobrescrito">x²</button>
+              <button class="tool" data-command="subscript" title="Subscrito">x₂</button>
+              <button class="tool" data-command="removeFormat" title="Limpar formatação">Tx</button>
               <label class="color-tool" title="Cor do texto"><span>A</span><input type="color" id="textColor" value="#302820" aria-label="Cor do texto" /></label>
+              <label class="color-tool" title="Realce do texto"><span>▰</span><input type="color" id="highlightColor" value="#f4df83" aria-label="Cor do realce" /></label>
               <button class="tool" id="shadowBtn" title="Sombra no texto">◐</button>
             </div>
             <div class="toolbar-separator"></div>
@@ -67,10 +72,16 @@
             <div class="toolbar-separator"></div>
             <div class="toolbar-group">
               <button class="tool labeled" id="insertImageBtn" title="Inserir imagem">▧ <span>Imagem</span></button>
+              <details class="insert-menu"><summary>Inserir ▾</summary><div>
+                <button id="insertLinkBtn" type="button">Link</button><button id="insertTableBtn" type="button">Tabela 3 × 3</button>
+                <button id="insertRuleBtn" type="button">Linha horizontal</button><button id="insertDateBtn" type="button">Data atual</button>
+              </div></details>
+              <button class="tool labeled" id="findBtn" title="Buscar (Ctrl+F)">⌕ <span>Buscar</span></button>
               <button class="tool" data-command="undo" title="Desfazer (Ctrl+Z)">↶</button>
               <button class="tool" data-command="redo" title="Refazer (Ctrl+Y)">↷</button>
             </div>
           </div>
+          <div id="findBar" class="find-bar" hidden><input id="findText" type="search" placeholder="Buscar no livro" aria-label="Buscar" /><span id="findResult"></span><button id="findNext" type="button">Próximo</button><input id="replaceText" placeholder="Substituir por" aria-label="Substituir por" /><button id="replaceOne" type="button">Substituir</button><button id="replaceAll" type="button">Todos</button><button id="findClose" type="button" aria-label="Fechar busca">×</button></div>
 
           <div class="canvas-wrap" id="canvasWrap"><div id="pageCanvas" class="page-canvas"></div></div>
           <div class="canvas-footer"><span id="pageCount">1 página</span><span id="wordCount">0 palavras</span><label class="zoom-control">Zoom <select id="zoomSelect" aria-label="Zoom das páginas"><option value="0.7">70%</option><option value="0.8" selected>80%</option><option value="0.9">90%</option><option value="1">100%</option></select></label></div>
@@ -99,6 +110,12 @@
             <label>Esquerda <input type="number" data-margin-side="left" min="5" max="50" value="20" /> mm</label>
           </div>
           <label class="field-row"><span>Formato</span><select id="pageSize"><option value="a4">A4</option><option value="letter">Carta</option></select></label>
+          <label class="field-row"><span>Numeração</span><input id="showPageNumber" type="checkbox" /></label>
+
+          <div id="tableInspector" hidden><div class="inspector-divider"></div><div class="section-label">TABELA SELECIONADA</div>
+            <div class="table-actions"><button data-table-action="row">+ Linha</button><button data-table-action="column">+ Coluna</button><button data-table-action="sum">Σ Soma</button><button data-table-action="average">Média</button><button data-table-action="delete">Excluir tabela</button></div>
+            <small>Escreva números nas células; selecione célula de resultado e clique Soma ou Média.</small>
+          </div>
 
           <div id="imageInspector" hidden>
             <div class="inspector-divider"></div>

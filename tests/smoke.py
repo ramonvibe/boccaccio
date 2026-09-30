@@ -49,7 +49,21 @@ SCRIPT = r"""(() => {
   const top = document.querySelector('[data-margin-side=top]');
   top.value = '30'; top.dispatchEvent(new Event('change'));
   const marginWorks = getComputedStyle(document.querySelector('.page-content')).paddingTop === '113px';
-  return JSON.stringify({tabWorks, shiftTabWorks, spacingWorks, listIndentWorks, listOutdentWorks, listExitWorks, emptyListExitWorks, marginWorks});
+  const current = document.querySelector('.page-content');
+  current.innerHTML = '<p>dragão antigo</p><table><tbody><tr><td>10</td><td>2</td></tr><tr><td>20</td><td>4</td></tr><tr><td><br></td><td><br></td></tr></tbody></table>';
+  current.dispatchEvent(new Event('input', {bubbles:true}));
+  const resultCell = current.querySelectorAll('tr')[2].cells[0];
+  resultCell.click(); document.querySelector('[data-table-action=sum]').click();
+  const sumWorks = resultCell.textContent === '30';
+  document.querySelector('#findText').value = 'dragão';
+  document.querySelector('#findNext').click();
+  const findWorks = getSelection().toString() === 'dragão';
+  document.querySelector('#replaceText').value = 'grifo';
+  document.querySelector('#replaceAll').click();
+  const replaceWorks = document.querySelector('.page-content').textContent.includes('grifo');
+  const number = document.querySelector('#showPageNumber'); number.checked = true; number.dispatchEvent(new Event('change'));
+  const pageNumberWorks = document.querySelector('.page-number')?.textContent === '1';
+  return JSON.stringify({tabWorks, shiftTabWorks, spacingWorks, listIndentWorks, listOutdentWorks, listExitWorks, emptyListExitWorks, marginWorks, sumWorks, findWorks, replaceWorks, pageNumberWorks});
 })()"""
 
 
