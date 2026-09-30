@@ -20,6 +20,7 @@ function ensureFont(name) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}&display=swap`;
+  link.onload = () => requestAnimationFrame(() => paginateFrom(0,true));
   document.head.append(link);
 }
 
@@ -192,7 +193,7 @@ function renderPages() {
     editor.setAttribute('aria-label',`Conteúdo da página ${index + 1}`); editor.setAttribute('aria-multiline','true');
     editor.innerHTML = page.html;
     editor.addEventListener('focus', () => activatePage(page.id, false));
-    editor.addEventListener('input', () => { page.html = editor.innerHTML; scheduleSave(); updateCounts(); updateOverflow(shell,editor,height); updatePageMeta(page); });
+    editor.addEventListener('input', () => { page.html = editor.innerHTML; paginateFrom(doc.pages.indexOf(page)); });
     editor.addEventListener('click', event => {
       if (event.target.matches('img.editor-image')) selectImage(event.target);
       else selectImage(null);
@@ -211,7 +212,7 @@ function renderPages() {
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); addPage(); }
     });
     sheet.append(editor); shell.append(label,sheet);
-    const note = document.createElement('div'); note.className = 'overflow-note'; note.textContent = 'Conteúdo passou do limite da página. Continue em uma nova página.'; shell.append(note);
+    const note = document.createElement('div'); note.className = 'overflow-note'; note.textContent = 'Elemento grande demais para esta página. Reduza imagem, fonte ou margens.'; shell.append(note);
     canvas.append(shell);
     for (const font of FONT_NAMES) if (page.html.includes(font)) ensureFont(font);
     requestAnimationFrame(() => updateOverflow(shell,editor,height));
@@ -224,6 +225,108 @@ function updatePageMeta(page) {
   if (item) item.querySelector('small').textContent = pageShortName(page,doc.pages.indexOf(page));
 }
 function updateOverflow(shell,editor,height) { shell.querySelector('.sheet').classList.toggle('overflowing', editor.scrollHeight > height + 3); }
+function saveVisiblePages() {
+  for (const page of doc.pages) {
+    const editor = editorFor(page.id);
+    if (editor) page.html = editor.innerHTML;
+  }
+}
+function caretMarker() {
+  const selection = window.getSelection();
+  const range = selection.rangeCount && selection.isCollapsed ? selection.getRangeAt(0).cloneRange() : null;
+  const editor = range && (range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer.closest?.('.page-content') : range.commonAncestorContainer.parentElement?.closest('.page-content'));
+  if (!editor) return null;
+  const marker = document.createElement('span');
+  marker.dataset.paginationCaret = '';
+  marker.style.display = 'none';
+  range.insertNode(marker);
+  return marker;
+}
+function restoreCaret() {
+  const marker = document.querySelector('[data-pagination-caret]');
+  if (!marker) return;
+  const editor = marker.closest('.page-content');
+  const range = document.createRange();
+  range.setStartAfter(marker); range.collapse(true); marker.remove();
+  editor.focus();
+  const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+  activeId = editor.dataset.id; savedRange = range.cloneRange();
+}
+function splitToFit(block,editor) {
+  if (block.nodeType !== Node.ELEMENT_NODE || !block.textContent.trim()) return null;
+  const scale = editor.getBoundingClientRect().height / editor.clientHeight;
+  const limit = editor.getBoundingClientRect().bottom - parseFloat(getComputedStyle(editor).paddingBottom) * scale - 2;
+  const walker = document.createTreeWalker(block,NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let point = null; let node;
+  while ((node = walker.nextNode())) {
+    if (!node.length) continue;
+    range.selectNodeContents(node);
+    const rects = range.getClientRects();
+    if (rects.length && rects[rects.length - 1].bottom <= limit) { point = [node,node.length]; continue; }
+    let low = 0, high = node.length;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      range.setStart(node,0); range.setEnd(node,middle);
+      const fragments = range.getClientRects();
+      if (fragments.length && fragments[fragments.length - 1].bottom <= limit) low = middle;
+      else high = middle - 1;
+    }
+    if (low) {
+      const space = node.textContent.lastIndexOf(' ',low - 1);
+      point = [node,space > 0 ? space + 1 : low];
+    }
+    break;
+  }
+  if (!point || (point[0] === block.lastChild && point[1] === point[0].length)) return null;
+  const tail = document.createRange();
+  tail.setStart(point[0],point[1]); tail.setEnd(block,block.childNodes.length);
+  const preview = tail.cloneContents();
+  if (!preview.textContent.trim() && !preview.querySelector('img')) return null;
+  const content = tail.extractContents();
+  if (!content.hasChildNodes()) return null;
+  const continuation = block.cloneNode(false); continuation.append(content);
+  return continuation;
+}
+function paginateFrom(startIndex = 0, allPages = false) {
+  if (!doc.pages.length || !editorFor(doc.pages[0].id)) return;
+  const first = editorFor(doc.pages[Math.max(0,startIndex)].id);
+  if (!allPages && first.scrollHeight <= first.clientHeight + 3) {
+    const page = doc.pages[startIndex]; page.html = first.innerHTML;
+    updatePageMeta(page); updateCounts(); scheduleSave(); return;
+  }
+  caretMarker();
+  let movedContent = false;
+  for (let index = Math.max(0,startIndex); index < doc.pages.length; index++) {
+    const page = doc.pages[index]; let editor = editorFor(page.id);
+    let attempts = 0;
+    let movedOnPage = false;
+    while (editor.scrollHeight > editor.clientHeight + 3 && attempts++ < 500) {
+      const last = [...editor.childNodes].reverse().find(node => node.nodeType !== 1 || !node.hasAttribute('data-pagination-caret'));
+      if (!last) break;
+      if (!doc.pages[index + 1]) {
+        saveVisiblePages();
+        doc.pages.push({...page,id:crypto.randomUUID(),html:''});
+        renderPages(); editor = editorFor(page.id);
+        continue;
+      }
+      const continuation = splitToFit(last,editor);
+      if (!continuation && [...editor.childNodes].filter(node => node.nodeType !== 1 || !node.hasAttribute('data-pagination-caret')).length <= 1) break;
+      const next = editorFor(doc.pages[index + 1].id);
+      if (next.innerHTML === '<p><br></p>' || next.innerHTML === '<div><br></div>') next.replaceChildren();
+      const first = next.firstChild;
+      next.insertBefore(continuation || last,first);
+      const marker = editor.lastChild;
+      if (marker?.nodeType === 1 && marker.hasAttribute('data-pagination-caret')) next.insertBefore(marker,first);
+      movedOnPage = true; movedContent = true;
+    }
+    updateOverflow(editor.closest('.sheet-shell'),editor,pageDimensions(page)[1]);
+    if (!allPages && !movedOnPage) break;
+  }
+  restoreCaret(); saveVisiblePages();
+  if (movedContent) renderPageList(); else updatePageMeta(doc.pages[startIndex]);
+  updateCounts(); updateInspector(); scheduleSave();
+}
 function updateCounts() {
   $('#pageCount').textContent = `${doc.pages.length} ${doc.pages.length === 1 ? 'página' : 'páginas'}`;
   const count = doc.pages.reduce((sum,page) => sum + wordCount(page.html),0);
@@ -265,8 +368,7 @@ function restoreSelection() {
 function syncEditor() {
   const editor = editorFor(); if (!editor) return;
   currentPage().html = editor.innerHTML;
-  scheduleSave(); updateCounts(); updatePageMeta(currentPage());
-  updateOverflow(editor.closest('.sheet-shell'), editor, pageDimensions(currentPage())[1]);
+  paginateFrom(doc.pages.indexOf(currentPage()));
 }
 function command(name,value = null) {
   restoreSelection();
@@ -353,6 +455,7 @@ function exportHtml() {
 }
 
 function bindEvents() {
+  $('#zoomSelect').addEventListener('change',event => { $('#pageCanvas').style.zoom = event.target.value; });
   $('#docTitle').addEventListener('input',event => { doc.title = event.target.value; document.title = `${doc.title} — Boccaccio`; scheduleSave(); });
   $('#addPage').addEventListener('click',() => addPage()); $('#addPageSmall').addEventListener('click',() => addPage());
   $('#duplicatePageBtn').addEventListener('click',() => addPage(true));
@@ -371,8 +474,8 @@ function bindEvents() {
   $('#removeBackgroundBtn').addEventListener('click',() => { currentPage().bgImage = ''; renderPages(); scheduleSave(); });
   $('#backgroundGrid').addEventListener('click',event => { const button = event.target.closest('[data-bg]'); if (!button) return; currentPage().bg = button.dataset.bg; if (button.dataset.bg === 'custom') $('#pageColor').click(); renderPages(); scheduleSave(); });
   $('#pageColor').addEventListener('input',event => { currentPage().bgColor = event.target.value; currentPage().bg = 'custom'; const sheet = editorFor().parentElement; sheet.dataset.bg = 'custom'; sheet.style.setProperty('--custom-bg',event.target.value); document.querySelectorAll('.background-tile').forEach(button => button.classList.toggle('selected',button.dataset.bg === 'custom')); renderPageList(); scheduleSave(); });
-  $('#pageMargin').addEventListener('change',event => { currentPage().margin = event.target.value; renderPages(); scheduleSave(); });
-  $('#pageSize').addEventListener('change',event => { currentPage().size = event.target.value; renderPages(); scheduleSave(); });
+  $('#pageMargin').addEventListener('change',event => { const index = doc.pages.indexOf(currentPage()); currentPage().margin = event.target.value; renderPages(); paginateFrom(index,true); });
+  $('#pageSize').addEventListener('change',event => { const index = doc.pages.indexOf(currentPage()); currentPage().size = event.target.value; renderPages(); paginateFrom(index,true); });
   $('#imageWidth').addEventListener('input',event => { if (!selectedImage) return; selectedImage.style.width = `${event.target.value}%`; $('#imageWidthValue').textContent = `${event.target.value}%`; syncEditor(); });
   $('#imageWrap').addEventListener('change',event => { if (!selectedImage) return; selectedImage.dataset.wrap = event.target.value; syncEditor(); });
   $('#imageStyle').addEventListener('change',event => { if (!selectedImage) return; selectedImage.dataset.style = event.target.value; syncEditor(); });
@@ -385,7 +488,7 @@ function bindEvents() {
     $('#designToggle').setAttribute('aria-label',open ? 'Ocultar design da página' : 'Mostrar design da página');
   });
   $('#importBtn').addEventListener('click',() => $('#documentInput').click());
-  $('#documentInput').addEventListener('change',async event => { const file = event.target.files[0]; if (!file) return; try { doc = normalizeDocument(JSON.parse(await file.text())); activeId = doc.pages[0].id; $('#docTitle').value = doc.title; renderPages(); scheduleSave(); toast('Livro aberto.'); } catch { toast('Arquivo Boccaccio inválido.'); } event.target.value = ''; });
+  $('#documentInput').addEventListener('change',async event => { const file = event.target.files[0]; if (!file) return; try { doc = normalizeDocument(JSON.parse(await file.text())); activeId = doc.pages[0].id; $('#docTitle').value = doc.title; renderPages(); requestAnimationFrame(() => paginateFrom(0,true)); toast('Livro aberto.'); } catch { toast('Arquivo Boccaccio inválido.'); } event.target.value = ''; });
   document.addEventListener('selectionchange',rememberSelection);
   document.addEventListener('visibilitychange',() => { if (document.hidden && saveTimer) { clearTimeout(saveTimer); saveNow(); } });
   document.addEventListener('keydown',event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); $('#saveBtn').click(); } });
@@ -398,5 +501,6 @@ async function start() {
   if (saved) try { doc = normalizeDocument(saved); activeId = doc.pages[0].id; } catch { /* documento anterior corrompido: abrir novo */ }
   $('#docTitle').value = doc.title; document.title = `${doc.title} — Boccaccio`;
   ensureFont('Manufacturing Consent'); bindEvents(); renderPages();
+  requestAnimationFrame(() => paginateFrom(0,true));
 }
 start();

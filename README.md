@@ -8,10 +8,10 @@ Execute `python3 iniciar.py` nesta pasta. O navegador abre em `http://127.0.0.1:
 
 ## Usar
 
-- Edite texto diretamente nas páginas. `Ctrl+Enter` cria uma página.
+- Edite texto diretamente nas páginas. Ao encher uma folha, o texto continua na próxima automaticamente. `Ctrl+Enter` cria uma página manualmente.
 - Selecione texto para aplicar fonte, tamanho, cor, sombra e outros estilos.
 - **Imagem** insere um arquivo; ajuste tamanho, posição e moldura no painel direito. O texto contorna imagens alinhadas à esquerda ou à direita.
-- Cada página tem fundo, imagem de fundo, margens e formato próprios.
+- Cada página tem fundo, imagem de fundo, margens e formato próprios, inclusive páginas criadas automaticamente. Ajuste o zoom no rodapé.
 - Trabalho é salvo automaticamente neste navegador. **Salvar arquivo** baixa uma cópia editável `.boccaccio`; **Abrir** restaura essa cópia.
 - **Exportar** baixa HTML independente. **PDF / Imprimir** abre impressão do navegador; escolha “Salvar como PDF”. Para imprimir fundos, ative “Gráficos de fundo” nas opções do navegador.
 
@@ -19,4 +19,4 @@ As 51 fontes são carregadas do Google Fonts somente quando usadas. A fonte cita
 
 ## Limites atuais
 
-Documento fica neste navegador; não há contas, sincronização ou colaboração online. Texto longo além da altura da página recebe aviso; crie a próxima página com `Ctrl+Enter`. O arquivo `.boccaccio` serve como cópia de segurança e permite levar o livro para outro computador.
+Documento fica neste navegador; não há contas, sincronização ou colaboração online. O arquivo `.boccaccio` serve como cópia de segurança e permite levar o livro para outro computador.
