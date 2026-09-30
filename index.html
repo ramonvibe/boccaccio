@@ -53,7 +53,16 @@
               <button class="tool" data-command="justifyLeft" title="Alinhar à esquerda">☷</button>
               <button class="tool" data-command="justifyCenter" title="Centralizar">≡</button>
               <button class="tool" data-command="justifyRight" title="Alinhar à direita">☰</button>
+              <button class="tool" data-command="justifyFull" title="Justificar (Ctrl+J)">▤</button>
               <button class="tool" data-command="insertUnorderedList" title="Lista com marcadores">☷<small>•</small></button>
+              <button class="tool" data-command="insertOrderedList" title="Lista numerada">☷<small>1</small></button>
+              <button class="tool" id="decreaseIndent" title="Diminuir recuo (Shift+Tab)">⇤</button>
+              <button class="tool" id="increaseIndent" title="Recuo de parágrafo (Tab)">⇥</button>
+            </div>
+            <div class="toolbar-separator"></div>
+            <div class="toolbar-group">
+              <select id="lineSpacing" aria-label="Espaçamento entre linhas" title="Espaçamento entre linhas"><option value="1">Linhas 1,0</option><option value="1.15">Linhas 1,15</option><option value="1.5" selected>Linhas 1,5</option><option value="2">Linhas 2,0</option></select>
+              <select id="paragraphAfter" aria-label="Espaço após o parágrafo" title="Espaço após o parágrafo"><option value="0">Após 0 pt</option><option value="6">Após 6 pt</option><option value="12" selected>Após 12 pt</option><option value="18">Após 18 pt</option></select>
             </div>
             <div class="toolbar-separator"></div>
             <div class="toolbar-group">
@@ -82,7 +91,13 @@
 
           <div class="inspector-divider"></div>
           <div class="section-label">LAYOUT</div>
-          <label class="field-row"><span>Margens</span><select id="pageMargin"><option value="normal">Normal</option><option value="narrow">Estreita</option><option value="wide">Larga</option></select></label>
+          <label class="field-row"><span>Margens</span><select id="pageMargin"><option value="normal">Normal</option><option value="narrow">Estreita</option><option value="wide">Larga</option><option value="custom">Personalizada</option></select></label>
+          <div class="custom-margins" id="customMargins" hidden>
+            <label>Superior <input type="number" data-margin-side="top" min="5" max="50" value="20" /> mm</label>
+            <label>Direita <input type="number" data-margin-side="right" min="5" max="50" value="20" /> mm</label>
+            <label>Inferior <input type="number" data-margin-side="bottom" min="5" max="50" value="20" /> mm</label>
+            <label>Esquerda <input type="number" data-margin-side="left" min="5" max="50" value="20" /> mm</label>
+          </div>
           <label class="field-row"><span>Formato</span><select id="pageSize"><option value="a4">A4</option><option value="letter">Carta</option></select></label>
 
           <div id="imageInspector" hidden>
