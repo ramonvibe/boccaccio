@@ -655,6 +655,7 @@ function exportHtml() {
 }
 
 function bindEvents() {
+  $('#themeToggle').addEventListener('click',() => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark',true));
   $('#zoomSelect').addEventListener('change',event => { $('#pageCanvas').style.zoom = event.target.value; });
   $('#docTitle').addEventListener('input',event => { doc.title = event.target.value; document.title = `${doc.title} — Boccaccio`; scheduleSave(); });
   $('#addPage').addEventListener('click',() => addPage()); $('#addPageSmall').addEventListener('click',() => addPage());
@@ -724,7 +725,18 @@ function bindEvents() {
   });
 }
 
+function setTheme(theme,save = false) {
+  document.documentElement.dataset.theme = theme;
+  const button = $('#themeToggle');
+  button.textContent = theme === 'dark' ? '☀' : '☾';
+  button.setAttribute('aria-label',theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro');
+  button.setAttribute('aria-pressed',String(theme === 'dark'));
+  if (save) try { localStorage.setItem('boccaccio-theme',theme); } catch { /* preferência opcional */ }
+}
 async function start() {
+  let theme;
+  try { theme = localStorage.getItem('boccaccio-theme'); } catch { /* armazenamento indisponível */ }
+  setTheme(theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
   for (const name of FONT_NAMES) { const option = document.createElement('option'); option.value = name; option.textContent = name; $('#fontFamily').append(option); }
   $('#fontFamily').value = 'Libre Baskerville';
   const saved = await readSaved();

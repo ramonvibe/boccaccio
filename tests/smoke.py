@@ -63,7 +63,11 @@ SCRIPT = r"""(() => {
   const replaceWorks = document.querySelector('.page-content').textContent.includes('grifo');
   const number = document.querySelector('#showPageNumber'); number.checked = true; number.dispatchEvent(new Event('change'));
   const pageNumberWorks = document.querySelector('.page-number')?.textContent === '1';
-  return JSON.stringify({tabWorks, shiftTabWorks, spacingWorks, listIndentWorks, listOutdentWorks, listExitWorks, emptyListExitWorks, marginWorks, sumWorks, findWorks, replaceWorks, pageNumberWorks});
+  if (document.documentElement.dataset.theme === 'dark') document.querySelector('#themeToggle').click();
+  const pageBackground = getComputedStyle(document.querySelector('.sheet')).backgroundColor;
+  document.querySelector('#themeToggle').click();
+  const darkModeWorks = document.documentElement.dataset.theme === 'dark' && localStorage.getItem('boccaccio-theme') === 'dark' && getComputedStyle(document.querySelector('.sheet')).backgroundColor === pageBackground;
+  return JSON.stringify({tabWorks, shiftTabWorks, spacingWorks, listIndentWorks, listOutdentWorks, listExitWorks, emptyListExitWorks, marginWorks, sumWorks, findWorks, replaceWorks, pageNumberWorks, darkModeWorks});
 })()"""
 
 
